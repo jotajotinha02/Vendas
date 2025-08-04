@@ -3,148 +3,133 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Contabilidade - Vendas</title>
+  <title>Controle de Vendas</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-    body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
-    .card-container { max-width: 90%; margin: 2rem auto; }
-    .action-button { transition: all 0.2s; }
-    .action-button:hover { transform: scale(1.05); opacity: 0.8; }
-  </style>
 </head>
-<body class="bg-gray-100 flex items-start justify-center min-h-screen p-4">
-  <div class="card-container bg-white shadow-xl rounded-2xl p-6 md:p-8 w-full lg:max-w-4xl">
-    <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800 mb-6">Registrar Venda</h1>
+<body class="bg-gray-100 p-6">
+  <div class="max-w-4xl mx-auto bg-white rounded-xl shadow p-6">
+    <h1 class="text-3xl font-bold text-center mb-6">Registro de Vendas</h1>
 
-    <form id="venda-form" class="space-y-4">
-      <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
-        <input id="usuario" type="text" placeholder="Usuário" required class="flex-1 p-3 rounded-xl border border-gray-300" />
-        <input id="quantidade" type="number" placeholder="Quantidade" required class="flex-1 p-3 rounded-xl border border-gray-300" />
-        <input id="valor" type="number" step="0.01" placeholder="Valor (R$)" required class="flex-1 p-3 rounded-xl border border-gray-300" />
-      </div>
-      <button type="submit" class="w-full bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-700 transition-colors">Registrar</button>
+    <form id="venda-form" class="grid md:grid-cols-4 gap-4 mb-6">
+      <input id="usuario" type="text" placeholder="Usuário" required class="p-2 border rounded" />
+      <input id="quantidade" type="number" placeholder="Quantidade" required class="p-2 border rounded" />
+      <input id="valor" type="number" placeholder="Valor" required class="p-2 border rounded" />
+      <button type="submit" class="bg-blue-600 text-white p-2 rounded hover:bg-blue-700">Salvar</button>
     </form>
 
-    <div class="my-8 h-px bg-gray-200"></div>
+    <input id="filtro-usuario" type="text" placeholder="Filtrar por usuário" class="w-full mb-4 p-2 border rounded" />
 
-    <h2 class="text-2xl font-semibold text-gray-800 mb-2">Filtro por usuário:</h2>
-    <div class="flex flex-col md:flex-row md:items-center md:space-x-4 space-y-4 md:space-y-0">
-      <input id="filtro-usuario" type="text" placeholder="Nome do usuário" class="flex-1 p-3 rounded-xl border border-gray-300" />
-      <button id="buscar-button" class="w-full md:w-auto bg-blue-600 text-white font-bold p-3 rounded-xl hover:bg-blue-700 transition-colors">Buscar</button>
-    </div>
-
-    <p class="text-lg font-medium text-gray-700 mt-4">
-      Total vendido: <span id="total-vendido" class="font-bold text-green-600">R$ 0,00</span><br>
-      Total de unidades: <span id="total-quantidade" class="font-bold text-blue-600">0</span>
-    </p>
-
-    <div class="overflow-x-auto mt-6 rounded-xl shadow-sm border border-gray-200">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Usuário</th>
-            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Quantidade</th>
-            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Valor (R$)</th>
-            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Data</th>
-            <th class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Ações</th>
+    <div class="overflow-auto">
+      <table class="w-full text-left border">
+        <thead>
+          <tr class="bg-gray-200">
+            <th class="p-2 border">Usuário</th>
+            <th class="p-2 border">Quantidade</th>
+            <th class="p-2 border">Valor</th>
+            <th class="p-2 border">Data</th>
+            <th class="p-2 border">Ações</th>
           </tr>
         </thead>
-        <tbody id="vendas-tabela-corpo" class="bg-white divide-y divide-gray-200"></tbody>
+        <tbody id="tabela-vendas"></tbody>
       </table>
     </div>
+
+    <p class="mt-4 font-semibold">Total de Quantidades: <span id="total-quantidade">0</span></p>
   </div>
 
   <script>
-    // 🔥 Inicializar Firebase
+    // CONFIG FIREBASE
     const firebaseConfig = {
       apiKey: "AIzaSyAsBm8_rX3BlUv1eSCWUJO5rqF-p9mBhic",
       authDomain: "hydra-61a32.firebaseapp.com",
       projectId: "hydra-61a32",
-      storageBucket: "hydra-61a32.firebasestorage.app",
+      storageBucket: "hydra-61a32.appspot.com",
       messagingSenderId: "179524818640",
       appId: "1:179524818640:web:56ceb938720574e85f30d5",
       measurementId: "G-FWRF1DRTRH"
     };
+
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+    const vendasRef = db.collection("vendas");
 
-    // 🔧 Referências do DOM
-    const vendaForm = document.getElementById('venda-form');
-    const usuarioInput = document.getElementById('usuario');
-    const quantidadeInput = document.getElementById('quantidade');
-    const valorInput = document.getElementById('valor');
-    const filtroInput = document.getElementById('filtro-usuario');
-    const buscarButton = document.getElementById('buscar-button');
-    const totalVendidoSpan = document.getElementById('total-vendido');
-    const totalQuantidadeSpan = document.getElementById('total-quantidade');
-    const tabelaCorpo = document.getElementById('vendas-tabela-corpo');
+    const form = document.getElementById("venda-form");
+    const tabela = document.getElementById("tabela-vendas");
+    const filtroInput = document.getElementById("filtro-usuario");
+    const totalQuantidadeEl = document.getElementById("total-quantidade");
 
-    const formatarMoeda = valor => new Intl.NumberFormat('pt-BR', {
-      style: 'currency', currency: 'BRL'
-    }).format(valor);
+    // Enviar venda
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const usuario = form.usuario.value.trim();
+      const quantidade = parseInt(form.quantidade.value);
+      const valor = parseFloat(form.valor.value);
 
-    const carregarVendas = async (filtro = '') => {
-      tabelaCorpo.innerHTML = '';
-      let totalValor = 0;
-      let totalQtd = 0;
+      if (!usuario || isNaN(quantidade) || isNaN(valor)) return;
 
-      let query = db.collection('vendas');
-      if (filtro) query = query.where('usuario', '==', filtro);
-
-      const snapshot = await query.orderBy('data', 'desc').get();
-
-      snapshot.forEach(doc => {
-        const venda = doc.data();
-        totalValor += Number(venda.valor);
-        totalQtd += Number(venda.quantidade);
-
-        const row = tabelaCorpo.insertRow();
-        row.innerHTML = `
-          <td class="px-6 py-4">${venda.usuario}</td>
-          <td class="px-6 py-4">${venda.quantidade}</td>
-          <td class="px-6 py-4">${formatarMoeda(venda.valor)}</td>
-          <td class="px-6 py-4">${venda.data}</td>
-          <td class="px-6 py-4">
-            <button class="text-red-600 hover:text-red-900 action-button" onclick="excluirVenda('${doc.id}')">Excluir</button>
-          </td>
-        `;
+      await vendasRef.add({
+        usuario,
+        quantidade,
+        valor,
+        data: new Date()
       });
 
-      totalVendidoSpan.textContent = formatarMoeda(totalValor);
-      totalQuantidadeSpan.textContent = totalQtd;
-    };
-
-    const excluirVenda = async (id) => {
-      await db.collection('vendas').doc(id).delete();
-      carregarVendas(filtroInput.value.trim());
-    };
-
-    vendaForm.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const venda = {
-        usuario: usuarioInput.value.trim(),
-        quantidade: Number(quantidadeInput.value),
-        valor: Number(valorInput.value),
-        data: new Date().toLocaleString('pt-BR')
-      };
-      await db.collection('vendas').add(venda);
-      vendaForm.reset();
-      carregarVendas();
+      form.reset();
     });
 
-    buscarButton.addEventListener('click', () => {
-      carregarVendas(filtroInput.value.trim());
+    // Atualizar tabela em tempo real
+    vendasRef.orderBy("data", "desc").onSnapshot(snapshot => {
+      let vendas = [];
+      snapshot.forEach(doc => {
+        vendas.push({ id: doc.id, ...doc.data() });
+      });
+
+      exibirVendas(vendas);
     });
 
-    filtroInput.addEventListener('input', () => {
-      carregarVendas(filtroInput.value.trim());
-    });
+    // Exibir vendas na tabela
+    function exibirVendas(vendas) {
+      const filtro = filtroInput.value.trim().toLowerCase();
+      let totalQuantidade = 0;
 
-    document.addEventListener('DOMContentLoaded', () => {
-      carregarVendas();
+      tabela.innerHTML = "";
+
+      vendas.forEach(v => {
+        if (!filtro || v.usuario.toLowerCase().includes(filtro)) {
+          totalQuantidade += v.quantidade;
+
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="p-2 border">${v.usuario}</td>
+            <td class="p-2 border">${v.quantidade}</td>
+            <td class="p-2 border">R$ ${v.valor.toFixed(2)}</td>
+            <td class="p-2 border">${new Date(v.data.toDate()).toLocaleString()}</td>
+            <td class="p-2 border text-center">
+              <button onclick="excluirVenda('${v.id}')" class="bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600">Excluir</button>
+            </td>
+          `;
+          tabela.appendChild(tr);
+        }
+      });
+
+      totalQuantidadeEl.textContent = totalQuantidade;
+    }
+
+    // Excluir venda
+    async function excluirVenda(id) {
+      if (confirm("Deseja excluir esta venda?")) {
+        await vendasRef.doc(id).delete();
+      }
+    }
+
+    // Filtro por usuário
+    filtroInput.addEventListener("input", async () => {
+      const snapshot = await vendasRef.orderBy("data", "desc").get();
+      let vendas = [];
+      snapshot.forEach(doc => vendas.push({ id: doc.id, ...doc.data() }));
+      exibirVendas(vendas);
     });
   </script>
 </body>
