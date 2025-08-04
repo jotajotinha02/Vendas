@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contabilidade - Vendas</title>
+    <!-- Inclui o Tailwind CSS e a fonte Inter -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .card-container {
+            max-width: 90%;
+            margin: 2rem auto;
+        }
+    </style>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-100 flex items-start justify-center min-h-screen p-4">
+    <div class="card-container bg-white shadow-xl rounded-2xl p-6 md:p-8 w-full lg:max-w-4xl">
+        <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800 mb-6">Registrar Venda</h1>
+        
+        <form id="venda-form" class="space-y-4">
+            <div class="flex flex-col md:flex-row md:space-x-4 space-y-4 md:space-y-0">
+                <div class="flex-1">
+                    <label for="usuario" class="sr-only">Usuário</label>
+                    <input type="text" id="usuario" placeholder="Usuário" class="w-full p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+                <div class="flex-1">
+                    <label for="quantidade" class="sr-only">Quantidade</label>
+                    <input type="number" id="quantidade" placeholder="Quantidade" class="w-full p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+                <div class="flex-1">
+                    <label for="valor" class="sr-only">Valor (R$)</label>
+                    <input type="number" step="0.01" id="valor" placeholder="Valor (R$)" class="w-full p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500" required>
+                </div>
+            </div>
+            <button type="submit" class="w-full bg-green-600 text-white font-bold p-3 rounded-xl hover:bg-green-700 transition-colors">
+                Registrar
+            </button>
+        </form>
+
+        <div class="my-8 h-px bg-gray-200"></div>
+
+        <div class="space-y-4">
+            <h2 class="text-2xl font-semibold text-gray-800">Filtro por usuário:</h2>
+            <div class="flex flex-col md:flex-row md:items-center md:space-x-4 space-y-4 md:space-y-0">
+                <div class="flex-1">
+                    <label for="filtro-usuario" class="sr-only">Nome do usuário</label>
+                    <input type="text" id="filtro-usuario" placeholder="Nome do usuário" class="w-full p-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <button id="buscar-button" class="w-full md:w-auto bg-blue-600 text-white font-bold p-3 rounded-xl hover:bg-blue-700 transition-colors">
+                    Buscar
+                </button>
+            </div>
+            
+            <p class="text-xl font-medium text-gray-700 mt-4">
+                Total vendido: <span id="total-vendido" class="font-bold text-green-600">R$ 0,00</span>
+            </p>
+        </div>
+
+        <div class="overflow-x-auto mt-6 rounded-xl shadow-sm border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Usuário</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Quantidade</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Valor (R$)</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Data</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="vendas-tabela-corpo" class="bg-white divide-y divide-gray-200">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Use as variáveis de ambiente que você configurou no Vercel
+        const firebaseConfig = {
+            apiKey: "${process.env.FIREBASE_API_KEY}",
+            authDomain: "${process.env.FIREBASE_AUTH_DOMAIN}",
+            projectId: "${process.env.FIREBASE_PROJECT_ID}",
+            storageBucket: "${process.env.FIREBASE_STORAGE_BUCKET}",
+            messagingSenderId: "${process.env.FIREBASE_MESSAGING_SENDER_ID}",
+            appId: "${process.env.FIREBASE_APP_ID}"
+        };
+
+        // Inicializa o Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        const vendaForm = document.getElementById('venda-form');
+        const usuarioInput = document.getElementById('usuario');
+        const quantidadeInput = document.getElementById('quantidade');
+        const valorInput = document.getElementById('valor');
+        const filtroInput = document.getElementById('filtro-usuario');
+        const buscarButton = document.getElementById('buscar-button');
+        const totalVendidoSpan = document.getElementById('total-vendido');
+        const tabelaCorpo = document.getElementById('vendas-tabela-corpo');
+
+        const formatarMoeda = (valor) => {
+            return new Intl.NumberFormat('pt-BR', {
+                style: 'currency',
+                currency: 'BRL'
+            }).format(valor);
+        };
+
+        const buscarVendas = async (filtro = '') => {
+            try {
+                let query = db.collection('vendas');
+                if (filtro) {
+                    query = query.where('usuario', '==', filtro);
+                }
+                const snapshot = await query.get();
+                const vendas = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+                tabelaCorpo.innerHTML = '';
+                
+                let total = 0;
+                vendas.forEach(venda => {
+                    total += Number(venda.valor);
+                    const row = tabelaCorpo.insertRow();
+                    row.className = 'text-gray-700';
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap">${venda.usuario}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${venda.quantidade}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${formatarMoeda(venda.valor)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">${venda.data}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onclick="excluirVenda('${venda.id}')" class="text-red-600 hover:text-red-900">
+                                Excluir
+                            </button>
+                        </td>
+                    `;
+                });
+                totalVendidoSpan.textContent = formatarMoeda(total);
+            } catch (error) {
+                console.error('Erro ao buscar vendas:', error);
+                tabelaCorpo.innerHTML = `<tr><td colspan="5" class="px-6 py-4 text-center text-red-500">Erro ao carregar os dados.</td></tr>`;
+                totalVendidoSpan.textContent = 'Erro';
+            }
+        };
+
+        const excluirVenda = async (id) => {
+            try {
+                await db.collection('vendas').doc(id).delete();
+                buscarVendas(filtroInput.value);
+            } catch (error) {
+                console.error('Erro ao excluir venda:', error);
+            }
+        };
+
+        vendaForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const novaVenda = {
+                usuario: usuarioInput.value,
+                quantidade: Number(quantidadeInput.value),
+                valor: Number(valorInput.value),
+                data: new Date().toLocaleString('pt-BR')
+            };
+
+            try {
+                await db.collection('vendas').add(novaVenda);
+                vendaForm.reset();
+                buscarVendas();
+            } catch (error) {
+                console.error('Erro ao registrar a venda:', error);
+            }
+        });
+
+        buscarButton.addEventListener('click', () => {
+            buscarVendas(filtroInput.value);
+        });
+
+        filtroInput.addEventListener('input', () => {
+            buscarVendas(filtroInput.value);
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            buscarVendas();
+        });
+    </script>
+</body>
+</html>
